@@ -1,10 +1,11 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-import requests
+from openai import OpenAI
 
 app = FastAPI()
 
+# ---------------- CORS ---------------- #
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,13 +14,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# YOUR GOOGLE API KEY
-API_KEY = ""
+# ---------------- GROQ CLIENT ---------------- #
+client = OpenAI(
+    api_key="",
+    base_url="https://api.groq.com/openai/v1"
+)
 
+# ---------------- REQUEST MODEL ---------------- #
 class FoodRequest(BaseModel):
     food: str
     goal: str
 
+# ---------------- API ROUTE ---------------- #
 @app.post("/analyze")
 def analyze_food(data: FoodRequest):
 
@@ -28,48 +34,46 @@ def analyze_food(data: FoodRequest):
 
     User Goal: {data.goal}
 
-    Give:
-    1. Health score
-    2. Estimated calories
-    3. Nutritional analysis
-    4. Healthy alternatives
-    5. Personalized suggestions
+    Give response in beautiful markdown format.
+
+    Include:
+    1. Health Score (/10)
+    2. Estimated Calories
+    3. Protein / Carbs / Fat breakdown
+    4. Nutritional Analysis
+    5. Healthy Alternatives
+    6. Personalized Suggestions
+    7. Best foods to eat next
     """
 
     try:
 
-        # GOOGLE GEMINI API URL
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key={API_KEY}"
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
 
-        # REQUEST PAYLOAD
-        payload = {
-            "contents": [
+            messages=[
                 {
-                    "parts": [
-                        {
-                            "text": prompt
-                        }
-                    ]
+                    "role": "system",
+                    "content": """
+                    You are NutriMind AI,
+                    an advanced AI Nutrition Intelligence Assistant.
+
+                    Give smart, modern, professional,
+                    health-focused nutrition advice.
+                    """
+                },
+
+                {
+                    "role": "user",
+                    "content": prompt
                 }
-            ]
-        }
+            ],
 
-        # SEND REQUEST
-        response = requests.post(url, json=payload)
+            temperature=0.7,
+            max_tokens=1200
+        )
 
-        # CONVERT RESPONSE TO JSON
-        result = response.json()
-
-        print(result)
-
-        # CHECK SUCCESS
-        if "candidates" in result:
-
-            text = result["candidates"][0]["content"]["parts"][0]["text"]
-
-        else:
-
-            text = f"API Error: {result}"
+        text = response.choices[0].message.content
 
         return {
             "result": text
@@ -78,5 +82,5 @@ def analyze_food(data: FoodRequest):
     except Exception as e:
 
         return {
-            "result": str(e)
+            "result": f"API Error: {str(e)}"
         }
